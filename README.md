@@ -25,17 +25,17 @@ After pulling changes, click the reload icon on the extension's card in `chrome:
 
 ## Settings
 
-Click the extension's toolbar icon to toggle:
+Click the extension's toolbar icon. "Enabled" at the top is the master switch; turning it off restores
+YouTube's own layout without a reload. The rest is grouped by page:
 
-| Setting | Default | Effect |
-| --- | --- | --- |
-| Enabled | on | Master switch. Turning it off restores YouTube's own layout without a reload. |
-| Hide Shorts | on | Hides the Shorts shelf and any individual Shorts in the feed. |
-| Hide "Most relevant" and other shelves | on | Hides every shelf-style section except the "Latest" header. |
-| Show Watch Later buttons in the feed | on | Adds the add/remove button and the "Saved" indicator to each row. |
-| Remove buttons on the Watch Later page | on | Adds the trash button to each row of the Watch Later playlist. |
-| Thumbnail width | 240px | Row height follows the thumbnail. |
-| Log details to the console | off | Prints which sections were hidden or kept, and Watch Later activity, to the page console. |
+| Section | Setting | Default | Effect |
+| --- | --- | --- | --- |
+| Subscriptions feed | Hide Shorts | on | Hides the Shorts shelf and any individual Shorts in the feed. |
+| Subscriptions feed | Hide "Most relevant" and other shelves | on | Hides every shelf-style section except the "Latest" header. |
+| Subscriptions feed | Watch Later button next to each thumbnail | on | Adds the add/remove button and the "Saved" indicator to each row. |
+| Subscriptions feed | Thumbnail width | 240px | Row height follows the thumbnail. |
+| Watch Later page | Remove button on each video | on | Adds the trash button next to each row's menu. |
+| Debugging | Log details to the console | off | Prints which sections were hidden or kept, and Watch Later activity, to the page console. |
 
 Settings sync through your Chrome profile and apply to open tabs immediately.
 

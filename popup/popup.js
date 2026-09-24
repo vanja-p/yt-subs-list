@@ -18,6 +18,7 @@ function render(settings) {
   }
   thumbWidth.value = settings.thumbWidth;
   thumbWidthValue.textContent = `${settings.thumbWidth}px`;
+  document.body.classList.toggle('disabled', !settings.enabled);
 }
 
 function save(partial) {
@@ -27,7 +28,10 @@ function save(partial) {
 chrome.storage.sync.get(DEFAULTS, (settings) => render({ ...DEFAULTS, ...settings }));
 
 for (const key of checkboxes) {
-  document.getElementById(key).addEventListener('change', (e) => save({ [key]: e.target.checked }));
+  document.getElementById(key).addEventListener('change', (e) => {
+    save({ [key]: e.target.checked });
+    if (key === 'enabled') document.body.classList.toggle('disabled', !e.target.checked);
+  });
 }
 
 thumbWidth.addEventListener('input', () => {
