@@ -10,6 +10,7 @@
 //   2. Tag each feed item with its video id so styles.css can lay it out as a row.
 //   3. Add a Watch Later indicator/toggle next to every thumbnail, backed by the
 //      Watch Later playlist fetched through YouTube's internal API.
+//   4. On the Watch Later playlist page, add a one-click remove button to each row.
 (() => {
   'use strict';
 
@@ -38,8 +39,21 @@
   const THUMB_ANCHOR = 'a.ytLockupViewModelContentImage, ytd-thumbnail';
   const VIDEO_LINK = 'a[href*="/watch?"], a[href*="/shorts/"]';
 
+  // Watch Later playlist page (/playlist?list=WL).
+  const PLAYLIST_BROWSE = 'ytd-browse[page-subtype="playlist"]';
+  const PLAYLIST_ROWS = 'ytd-playlist-video-renderer';
+  const PLAYLIST_ROW_LINK = 'a#video-title[href], ytd-thumbnail a[href]';
+  const WATCH_LATER_LIST = /[?&]list=WL(?:&|$)/;
+
   const root = document.documentElement;
-  const settings = { enabled: true, hideShorts: true, hideShelves: true, watchLater: true, debug: false };
+  const settings = {
+    enabled: true,
+    hideShorts: true,
+    hideShelves: true,
+    watchLater: true,
+    wlRemove: true,
+    debug: false,
+  };
 
   function readSettings() {
     const d = root.dataset;
@@ -47,6 +61,7 @@
     settings.hideShorts = d.yslHideShorts !== 'off';
     settings.hideShelves = d.yslHideShelves !== 'off';
     settings.watchLater = d.yslWatchLater !== 'off';
+    settings.wlRemove = d.yslWlRemove !== 'off';
     settings.debug = d.yslDebug === 'on';
   }
 
@@ -280,6 +295,7 @@
   const ICON_CLOCK =
     'M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z';
   const ICON_CHECK = 'M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z';
+  const ICON_TRASH = 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h8v10H8V9zm7.5-5-1-1h-5l-1 1H5v2h14V4z';
 
   function svgIcon(className, pathData) {
     const svg = document.createElementNS(SVG_NS, 'svg');
@@ -298,7 +314,7 @@
     wrap.dataset.vid = videoId;
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'ysl-wl-btn';
+    button.className = 'ysl-btn ysl-wl-btn';
     button.appendChild(svgIcon('ysl-icon-clock', ICON_CLOCK));
     button.appendChild(svgIcon('ysl-icon-check', ICON_CHECK));
     const label = document.createElement('span');
@@ -306,6 +322,33 @@
     wrap.appendChild(button);
     wrap.appendChild(label);
     return wrap;
+  }
+
+  function buildRemoveButton(videoId) {
+    const wrap = document.createElement('div');
+    wrap.className = 'ysl-rm';
+    wrap.dataset.vid = videoId;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'ysl-btn ysl-rm-btn';
+    button.appendChild(svgIcon('ysl-icon-trash', ICON_TRASH));
+    wrap.appendChild(button);
+    setRemoveState(wrap, 'out');
+    return wrap;
+  }
+
+  function setRemoveState(wrap, state) {
+    const button = wrap.firstElementChild;
+    button.dataset.state = state === 'failed' ? 'out' : state;
+    button.title =
+      state === 'busy'
+        ? 'Removing from Watch Later…'
+        : state === 'failed'
+          ? 'Could not remove from Watch Later. Click to retry.'
+          : 'Remove from Watch Later';
+    button.setAttribute('aria-label', button.title);
+    if (state === 'failed') wrap.dataset.error = '1';
+    else delete wrap.dataset.error;
   }
 
   const LABELS = { in: 'Saved', out: 'Watch later', unknown: 'Watch later', busy: '…', failed: 'Failed' };
@@ -392,18 +435,52 @@
     }
   }
 
+  // Removes a row on the Watch Later playlist page. Prefers the playlist entry
+  // id (setVideoId) that YouTube attaches to the row, which is what YouTube's
+  // own "Remove from Watch later" menu item sends; falls back to the video id.
+  async function removeFromWatchLater(wrap) {
+    const button = wrap.firstElementChild;
+    if (button.dataset.state === 'busy') return;
+    const videoId = wrap.dataset.vid;
+    const row = wrap.closest(PLAYLIST_ROWS);
+    let setVideoId = null;
+    try {
+      setVideoId = (row && row.data && row.data.setVideoId) || null;
+    } catch {
+      /* ignore */
+    }
+    const actions = setVideoId
+      ? [{ action: 'ACTION_REMOVE_VIDEO', setVideoId }]
+      : [{ action: 'ACTION_REMOVE_VIDEO_BY_VIDEO_ID', removedVideoId: videoId }];
+    setRemoveState(wrap, 'busy');
+    try {
+      const res = await innertube('browse/edit_playlist', { playlistId: 'WL', actions });
+      if (res && res.status && res.status !== 'STATUS_SUCCEEDED') throw new Error(`edit_playlist returned ${res.status}`);
+      wl.ids.delete(videoId);
+      wl.overrides.set(videoId, false);
+      updateButtonsFor(videoId);
+      if (row) row.setAttribute('data-ysl-removed', '1');
+      log(`Removed ${videoId} from Watch Later`);
+    } catch (err) {
+      warn(`Could not remove ${videoId} from Watch Later:`, err);
+      setRemoveState(wrap, 'failed');
+      setTimeout(() => setRemoveState(wrap, 'out'), 3000);
+    }
+  }
+
   function onClickCapture(event) {
     const target = event.target instanceof Element ? event.target : null;
-    const button = target && target.closest('.ysl-wl-btn');
+    const button = target && target.closest('.ysl-btn');
     if (!button) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    toggleWatchLater(button.parentElement);
+    if (button.classList.contains('ysl-rm-btn')) removeFromWatchLater(button.parentElement);
+    else toggleWatchLater(button.parentElement);
   }
 
   function swallowInsideButton(event) {
     const target = event.target instanceof Element ? event.target : null;
-    if (target && target.closest('.ysl-wl')) event.stopImmediatePropagation();
+    if (target && target.closest('.ysl-wl, .ysl-rm')) event.stopImmediatePropagation();
   }
 
   document.addEventListener('click', onClickCapture, true);
@@ -489,13 +566,37 @@
     return location.pathname === '/feed/subscriptions' || Boolean(document.querySelector(`${SUBS_BROWSE}:not([hidden])`));
   }
 
+  // ---------------------------------------------------------------------------
+  // Watch Later playlist page
+  // ---------------------------------------------------------------------------
+
+  function processPlaylistRow(row) {
+    const existing = row.querySelector('.ysl-rm');
+    if (row.hasAttribute('data-ysl-removed')) return;
+    const link = row.querySelector(PLAYLIST_ROW_LINK);
+    const href = link ? link.getAttribute('href') || '' : '';
+    const videoId = href && WATCH_LATER_LIST.test(href) ? videoIdFromHref(href) : null;
+    if (!videoId || !settings.wlRemove) {
+      if (existing) existing.remove();
+      return;
+    }
+    if (existing && existing.dataset.vid === videoId) return;
+    if (existing) existing.remove();
+    const content = row.querySelector('#content');
+    if (!content) return;
+    const wrap = buildRemoveButton(videoId);
+    const menu = content.querySelector(':scope > #menu');
+    if (menu) content.insertBefore(wrap, menu);
+    else content.appendChild(wrap);
+  }
+
   let cleanedUp = false;
 
   function cleanup() {
     if (cleanedUp) return;
     cleanedUp = true;
     document.querySelectorAll('[data-ysl-hidden]').forEach((el) => el.removeAttribute('data-ysl-hidden'));
-    document.querySelectorAll('.ysl-wl').forEach((el) => el.remove());
+    document.querySelectorAll('.ysl-wl, .ysl-rm').forEach((el) => el.remove());
   }
 
   function pass() {
@@ -505,13 +606,15 @@
       return;
     }
     cleanedUp = false;
-    const browses = document.querySelectorAll(SUBS_BROWSE);
-    if (!browses.length) return;
-    for (const browse of browses) {
+    const subsBrowses = document.querySelectorAll(SUBS_BROWSE);
+    for (const browse of subsBrowses) {
       browse.querySelectorAll(FEED_SECTIONS).forEach(processSection);
       browse.querySelectorAll(FEED_ITEMS).forEach(processItem);
     }
-    if (settings.watchLater && onSubscriptionsPage()) refreshWatchLater(false);
+    if (subsBrowses.length && settings.watchLater && onSubscriptionsPage()) refreshWatchLater(false);
+    for (const browse of document.querySelectorAll(PLAYLIST_BROWSE)) {
+      browse.querySelectorAll(PLAYLIST_ROWS).forEach(processPlaylistRow);
+    }
   }
 
   let passTimer = 0;
@@ -547,7 +650,14 @@
     });
     settingsObserver.observe(root, {
       attributes: true,
-      attributeFilter: ['data-ysl', 'data-ysl-hide-shorts', 'data-ysl-hide-shelves', 'data-ysl-watch-later', 'data-ysl-debug'],
+      attributeFilter: [
+        'data-ysl',
+        'data-ysl-hide-shorts',
+        'data-ysl-hide-shelves',
+        'data-ysl-watch-later',
+        'data-ysl-wl-remove',
+        'data-ysl-debug',
+      ],
     });
     window.addEventListener('yt-navigate-finish', schedulePass);
     document.addEventListener('yt-page-data-updated', schedulePass);

@@ -8,8 +8,11 @@ A Chrome extension that makes the YouTube subscriptions feed look the way it use
   channel, view count and upload age on the right. Duration badges and watched-progress bars are kept.
 - **Watch Later at a glance**: every row has a button next to the thumbnail that shows whether the video is
   already in your Watch Later playlist, and adds or removes it with one click.
+- **One-click removal on the Watch Later page**: each row on `/playlist?list=WL` gets a trash button next to
+  the three-dot menu, so removing a video no longer takes two clicks through the menu.
 
-Everything else on YouTube is left alone. The extension only touches `/feed/subscriptions`.
+Everything else on YouTube is left alone. The extension only touches `/feed/subscriptions` and the Watch
+Later playlist page.
 
 ## Install
 
@@ -29,7 +32,8 @@ Click the extension's toolbar icon to toggle:
 | Enabled | on | Master switch. Turning it off restores YouTube's own layout without a reload. |
 | Hide Shorts | on | Hides the Shorts shelf and any individual Shorts in the feed. |
 | Hide "Most relevant" and other shelves | on | Hides every shelf-style section except the "Latest" header. |
-| Show Watch Later buttons | on | Adds the add/remove button and the "Saved" indicator to each row. |
+| Show Watch Later buttons in the feed | on | Adds the add/remove button and the "Saved" indicator to each row. |
+| Remove buttons on the Watch Later page | on | Adds the trash button to each row of the Watch Later playlist. |
 | Thumbnail width | 240px | Row height follows the thumbnail. |
 | Log details to the console | off | Prints which sections were hidden or kept, and Watch Later activity, to the page console. |
 
@@ -61,21 +65,27 @@ your existing session cookie), so nothing new is stored and nothing leaves your 
 If the playlist cannot be loaded, the buttons dim and fall back to the hint YouTube embeds in the feed data;
 clicking still works.
 
+On the Watch Later page the trash button sends the same removal YouTube's own "Remove from Watch later" menu
+item sends (by playlist entry id when YouTube exposes it, otherwise by video id) and hides the row on success.
+YouTube's "N videos" count in the header is not updated until the page is reloaded.
+
 ## Testing
 
 YouTube requires a signed-in session, so the automated test runs against a saved copy of your own
 subscriptions page instead of the live site:
 
 1. In Chrome, open the subscriptions page and save it with **Ctrl+S → "Webpage, Complete"**
-   (for example to `~/Downloads/subs.html`). Never commit that file: it contains your session tokens.
+   (for example to `~/Downloads/subs.html`). Optionally do the same for the Watch Later page
+   (`~/Downloads/later.html`). Never commit those files: they contain your session tokens.
 2. `npm install`
-3. `npm test -- --fixture ~/Downloads/subs.html`
+3. `npm test -- --fixture ~/Downloads/subs.html --wl-fixture ~/Downloads/later.html`
 
-The harness strips YouTube's scripts from the saved page, serves it locally with a fake `ytcfg` and mocked
+The harness strips YouTube's scripts from the saved pages, serves them locally with a fake `ytcfg` and mocked
 `youtubei` endpoints, loads the extension into your installed Chrome in headless mode, and checks that the
 shelves are hidden, rows are laid out as thumbnail-left / title-right, Watch Later state is read from both
-playlist pages, and clicking a button sends the right add/remove request. Screenshots land in `test/out/`.
-Add `--wl-fail` to exercise the playlist-unavailable path.
+playlist pages, clicking a feed button sends the right add/remove request, and clicking a trash button on the
+Watch Later page sends a removal and hides the row. Screenshots land in `test/out/`. Add `--wl-fail` to
+exercise the API-unavailable paths.
 
 ## When YouTube changes its markup
 

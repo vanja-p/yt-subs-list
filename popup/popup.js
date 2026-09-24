@@ -4,10 +4,11 @@ const DEFAULTS = {
   hideShorts: true,
   hideShelves: true,
   watchLater: true,
+  wlRemove: true,
   debug: false,
 };
 
-const checkboxes = ['enabled', 'hideShorts', 'hideShelves', 'watchLater', 'debug'];
+const checkboxes = ['enabled', 'hideShorts', 'hideShelves', 'watchLater', 'wlRemove', 'debug'];
 const thumbWidth = document.getElementById('thumbWidth');
 const thumbWidthValue = document.getElementById('thumbWidthValue');
 

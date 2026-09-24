@@ -11,6 +11,7 @@ const DEFAULTS = {
   hideShorts: true,
   hideShelves: true,
   watchLater: true,
+  wlRemove: true,
   debug: false,
 };
 
@@ -21,6 +22,7 @@ function apply(settings) {
   root.dataset.yslHideShorts = onOff(settings.hideShorts);
   root.dataset.yslHideShelves = onOff(settings.hideShelves);
   root.dataset.yslWatchLater = onOff(settings.watchLater);
+  root.dataset.yslWlRemove = onOff(settings.wlRemove);
   root.dataset.yslDebug = onOff(settings.debug);
   const width = Math.max(120, Math.min(600, Number(settings.thumbWidth) || DEFAULTS.thumbWidth));
   root.style.setProperty('--ysl-thumb-width', `${width}px`);

@@ -1,15 +1,17 @@
 #!/usr/bin/env node
-// End-to-end smoke test against a saved copy of the subscriptions page.
+// End-to-end smoke test against saved copies of YouTube pages.
 //
 // YouTube requires a signed-in session, so the test cannot use the live site.
-// Instead it takes a "Webpage, Complete" save of https://www.youtube.com/feed/subscriptions
-// (which contains your real feed markup), strips YouTube's scripts, serves it
-// locally together with a fake ytcfg and mocked InnerTube endpoints, loads the
-// extension into the installed Chrome, and checks the result.
+// Instead it takes "Webpage, Complete" saves of the subscriptions page and,
+// optionally, the Watch Later playlist page (which contain your real markup),
+// strips YouTube's scripts, serves them locally together with a fake ytcfg and
+// mocked InnerTube endpoints, loads the extension into the installed Chrome,
+// and checks the result.
 //
-//   node test/run.mjs --fixture ~/Downloads/subs.html [--out test/out] [--chrome /usr/bin/google-chrome] [--wl-fail]
+//   node test/run.mjs --fixture ~/Downloads/subs.html [--wl-fixture ~/Downloads/later.html]
+//                     [--out test/out] [--chrome /usr/bin/google-chrome] [--wl-fail]
 //
-// The fixture is never committed: it contains your session tokens and feed.
+// The fixtures are never committed: they contain your session tokens.
 
 import fs from 'node:fs';
 import http from 'node:http';
@@ -22,46 +24,54 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
 
 const args = parseArgs(process.argv.slice(2));
-const fixturePath = path.resolve(expandHome(args.fixture || ''));
 const outDir = path.resolve(expandHome(args.out || path.join(here, 'out')));
 const chromePath = args.chrome || '/usr/bin/google-chrome';
 const wlFail = Boolean(args['wl-fail']);
 
-if (!args.fixture || !fs.existsSync(fixturePath)) {
-  console.error('Usage: node test/run.mjs --fixture <saved subscriptions page.html> [--out dir] [--chrome path] [--wl-fail]');
+if (!args.fixture || !fs.existsSync(path.resolve(expandHome(args.fixture)))) {
+  console.error(
+    'Usage: node test/run.mjs --fixture <saved subscriptions page.html> [--wl-fixture <saved Watch Later page.html>] [--out dir] [--chrome path] [--wl-fail]'
+  );
+  process.exit(2);
+}
+if (args['wl-fixture'] && !fs.existsSync(path.resolve(expandHome(args['wl-fixture'])))) {
+  console.error(`Watch Later fixture not found: ${args['wl-fixture']}`);
   process.exit(2);
 }
 fs.mkdirSync(outDir, { recursive: true });
 
 // ---------------------------------------------------------------------------
-// Fixture: strip scripts, add a fake ytcfg + cookie, add a little layout CSS
+// Fixtures: strip scripts, add a fake ytcfg + cookie, add a little layout CSS
 // that YouTube normally injects from JavaScript.
 // ---------------------------------------------------------------------------
 
-const rawHtml = fs.readFileSync(fixturePath, 'utf8');
-const feedIds = [...rawHtml.matchAll(/content-id-([A-Za-z0-9_-]{11})/g)].map((m) => m[1]);
-const uniqueIds = [...new Set(feedIds)];
-if (uniqueIds.length < 12) {
-  console.error(`Fixture only has ${uniqueIds.length} video ids; expected a full feed.`);
-  process.exit(2);
-}
-const WL_PAGE1 = [uniqueIds[3], uniqueIds[7], uniqueIds[8]];
-const WL_PAGE2 = [uniqueIds[10]];
-const WL_ALL = new Set([...WL_PAGE1, ...WL_PAGE2]);
-
 const fixtureCss = `
   ytd-masthead, #masthead-container, ytd-mini-guide-renderer, tp-yt-app-drawer, ytd-guide-renderer,
-  ytd-popup-container, ytd-miniplayer, ytd-watch-flexy, ytd-player, ytd-yoodle-renderer { display: none !important; }
+  ytd-popup-container, ytd-miniplayer, ytd-watch-flexy, ytd-player, ytd-yoodle-renderer,
+  ytd-playlist-sidebar-renderer, ytd-playlist-header-renderer, yt-page-header-portal { display: none !important; }
   body { margin: 0; background: #0f0f0f; color: #f1f1f1; }
   ytd-app, ytd-page-manager { display: block; }
   ytd-browse[hidden] { display: none !important; }
   ytd-browse { display: block; max-width: 1440px; margin: 0 auto; padding: 24px; box-sizing: border-box; }
+  /* Subscriptions grid (what YouTube's own CSS does). */
   #contents.ytd-rich-grid-renderer { display: flex; flex-wrap: wrap; --ytd-rich-grid-item-margin: 16px; --ytd-rich-grid-row-margin: 40px; }
   ytd-rich-item-renderer { position: relative; margin: 0 8px 40px; width: calc(100% / var(--ytd-rich-grid-items-per-row, 4) - 16px); }
   ytd-rich-section-renderer { width: 100%; display: flex; justify-content: center; }
   #content.ytd-rich-section-renderer { width: 100%; margin: 0 8px; }
   ytd-rich-shelf-renderer #contents { display: flex; gap: 16px; overflow: hidden; }
   h2 { font-size: 2rem; margin: 0 0 12px; }
+  /* Playlist rows (what YouTube's own CSS does). */
+  ytd-playlist-video-renderer { display: flex; flex-direction: row; align-items: center; }
+  #index-container.ytd-playlist-video-renderer { display: flex; align-items: center; width: 40px; flex: none; }
+  #content.ytd-playlist-video-renderer { display: flex; flex-direction: row; flex: 1; min-width: 0; padding: 8px 0; }
+  #container.ytd-playlist-video-renderer { display: flex; flex: 1; min-width: 0; }
+  ytd-thumbnail.ytd-playlist-video-renderer { width: 200px; height: 113px; margin-right: 8px; flex: none; display: block; }
+  ytd-thumbnail.ytd-playlist-video-renderer a { display: block; position: relative; width: 100%; height: 100%; }
+  ytd-thumbnail.ytd-playlist-video-renderer yt-image { display: block; width: 100%; height: 100%; }
+  #meta.ytd-playlist-video-renderer { flex: 1; min-width: 0; }
+  #menu.ytd-playlist-video-renderer { min-width: 40px; }
+  h3.ytd-playlist-video-renderer { margin: 0 0 4px; font-size: 1.6rem; font-weight: 500; }
+  #video-title.ytd-playlist-video-renderer { color: #f1f1f1; text-decoration: none; }
 `;
 
 const fixtureScript = `
@@ -80,17 +90,34 @@ const fixtureScript = `
   document.cookie = 'SAPISID=fakeSapisid; path=/';
 `;
 
-const fixtureHtml = rawHtml
-  .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
-  .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, '')
-  .replace(/<head([^>]*)>/i, `<head$1><script>${fixtureScript}</script><style>${fixtureCss}</style>`);
+function loadFixture(p) {
+  const abs = path.resolve(expandHome(p));
+  const raw = fs.readFileSync(abs, 'utf8');
+  const html = raw
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, '')
+    .replace(/<head([^>]*)>/i, `<head$1><script>${fixtureScript}</script><style>${fixtureCss}</style>`);
+  return { path: abs, dir: path.dirname(abs), name: path.basename(abs), raw, html };
+}
+
+const subsFixture = loadFixture(args.fixture);
+const wlFixture = args['wl-fixture'] ? loadFixture(args['wl-fixture']) : null;
+const fixtures = [subsFixture, wlFixture].filter(Boolean);
+
+const feedIds = [...subsFixture.raw.matchAll(/content-id-([A-Za-z0-9_-]{11})/g)].map((m) => m[1]);
+const uniqueIds = [...new Set(feedIds)];
+if (uniqueIds.length < 12) {
+  console.error(`Subscriptions fixture only has ${uniqueIds.length} video ids; expected a full feed.`);
+  process.exit(2);
+}
+const WL_PAGE1 = [uniqueIds[3], uniqueIds[7], uniqueIds[8]];
+const WL_PAGE2 = [uniqueIds[10]];
+const WL_ALL = new Set([...WL_PAGE1, ...WL_PAGE2]);
 
 // ---------------------------------------------------------------------------
-// Local server: static files from the fixture directory + mocked InnerTube.
+// Local server: static files from the fixture directories + mocked InnerTube.
 // ---------------------------------------------------------------------------
 
-const fixtureDir = path.dirname(fixturePath);
-const fixtureName = path.basename(fixturePath);
 const requests = { browse: [], edit: [] };
 
 const MIME = {
@@ -168,47 +195,47 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && url.pathname.startsWith('/youtubei/v1/')) {
     const body = JSON.parse((await readBody(req)) || '{}');
     const entry = { path: url.pathname, headers: req.headers, body };
-    if (url.pathname === '/youtubei/v1/browse') {
-      requests.browse.push(entry);
-      if (wlFail) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end('{"error":"mock failure"}');
-        return;
-      }
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(wlResponse(body)));
+    const isBrowse = url.pathname === '/youtubei/v1/browse';
+    const isEdit = url.pathname === '/youtubei/v1/browse/edit_playlist';
+    if (isBrowse) requests.browse.push(entry);
+    if (isEdit) requests.edit.push(entry);
+    if (!isBrowse && !isEdit) {
+      res.writeHead(404);
+      res.end();
       return;
     }
-    if (url.pathname === '/youtubei/v1/browse/edit_playlist') {
-      requests.edit.push(entry);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'STATUS_SUCCEEDED' }));
+    if (wlFail) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end('{"error":"mock failure"}');
       return;
     }
-    res.writeHead(404);
-    res.end();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(isBrowse ? wlResponse(body) : { status: 'STATUS_SUCCEEDED' }));
     return;
   }
 
-  let pathname = decodeURIComponent(url.pathname);
-  if (pathname === '/' || pathname === `/${fixtureName}`) {
+  const pathname = decodeURIComponent(url.pathname);
+  const fixture = fixtures.find((f) => pathname === `/${f.name}`);
+  if (fixture) {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(fixtureHtml);
+    res.end(fixture.html);
     return;
   }
-  const filePath = path.join(fixtureDir, pathname);
-  if (!filePath.startsWith(fixtureDir) || !fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-    res.writeHead(404);
-    res.end();
-    return;
+  for (const dir of new Set(fixtures.map((f) => f.dir))) {
+    const filePath = path.join(dir, pathname);
+    if (filePath.startsWith(dir) && fs.existsSync(filePath) && !fs.statSync(filePath).isDirectory()) {
+      res.writeHead(200, { 'Content-Type': mimeFor(filePath) });
+      fs.createReadStream(filePath).pipe(res);
+      return;
+    }
   }
-  res.writeHead(200, { 'Content-Type': mimeFor(filePath) });
-  fs.createReadStream(filePath).pipe(res);
+  res.writeHead(404);
+  res.end();
 });
 
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const port = server.address().port;
-const fixtureUrl = `http://127.0.0.1:${port}/${fixtureName}`;
+const urlFor = (fixture) => `http://127.0.0.1:${port}/${fixture.name}`;
 
 // ---------------------------------------------------------------------------
 // Extension copy with the local origin added to the content script matches.
@@ -232,6 +259,7 @@ function check(name, ok, detail = '') {
   (ok ? passes : failures).push(`${name}${detail ? ` — ${detail}` : ''}`);
   console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` — ${detail}` : ''}`);
 }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Current Chrome builds ignore --load-extension; Puppeteer's enableExtensions
 // installs the unpacked extension through the DevTools protocol instead.
@@ -251,7 +279,25 @@ try {
   });
   page.on('pageerror', (err) => consoleErrors.push(String(err)));
 
-  await page.goto(fixtureUrl, { waitUntil: 'load', timeout: 60000 });
+  await testSubscriptionsPage(page);
+  if (wlFixture) await testWatchLaterPage(page);
+
+  const ownErrors = consoleErrors.filter((e) => e.includes('yt-subs-list'));
+  check('no extension errors in console', ownErrors.length === 0, ownErrors.join(' | '));
+} finally {
+  await browser.close();
+  server.close();
+  fs.rmSync(extDir, { recursive: true, force: true });
+}
+
+console.log(`\n${passes.length} passed, ${failures.length} failed. Screenshots in ${outDir}`);
+process.exit(failures.length ? 1 : 0);
+
+// ---------------------------------------------------------------------------
+
+async function testSubscriptionsPage(page) {
+  console.log(`\n== Subscriptions page (${subsFixture.name}) ==`);
+  await page.goto(urlFor(subsFixture), { waitUntil: 'load', timeout: 60000 });
 
   const wlSettled = await page
     .waitForFunction(
@@ -261,7 +307,7 @@ try {
     .then(() => true)
     .catch(() => false);
   check('Watch Later fetch settled', wlSettled);
-  await new Promise((r) => setTimeout(r, 300));
+  await sleep(300);
 
   const snapshot = await page.evaluate(() => {
     const visible = (el) => {
@@ -348,15 +394,8 @@ try {
     check('browse request has context', Boolean(browseReq && browseReq.body.context && browseReq.body.context.client));
   }
 
-  await page.screenshot({ path: path.join(outDir, 'top.png') });
+  await page.screenshot({ path: path.join(outDir, 'subs.png') });
   const firstOut = withButtons.find((i) => i.wlState === 'out') || withButtons[0];
-  if (firstOut) {
-    await page.evaluate((id) => {
-      document.querySelector(`.ysl-wl[data-vid="${id}"]`).scrollIntoView({ block: 'center' });
-    }, firstOut.id);
-    await new Promise((r) => setTimeout(r, 200));
-    await page.screenshot({ path: path.join(outDir, 'rows.png') });
-  }
 
   // Toggle: click an "out" button, expect an ADD, then click again for a REMOVE.
   if (!wlFail && firstOut) {
@@ -378,32 +417,96 @@ try {
 
   // Disable via the settings attribute (what content.js does when toggled off).
   await page.evaluate(() => { document.documentElement.dataset.ysl = 'off'; });
-  await new Promise((r) => setTimeout(r, 300));
+  await sleep(300);
   const disabled = await page.evaluate(() => ({
     buttons: document.querySelectorAll('.ysl-wl').length,
     hidden: document.querySelectorAll('[data-ysl-hidden]').length,
     shelfVisible: getComputedStyle(document.querySelector('ytd-rich-shelf-renderer[is-shorts]').closest('ytd-rich-section-renderer')).display !== 'none',
   }));
   check('disabling removes buttons and unhides shelves', disabled.buttons === 0 && disabled.hidden === 0 && disabled.shelfVisible, JSON.stringify(disabled));
-  await page.screenshot({ path: path.join(outDir, 'disabled.png') });
+  await page.screenshot({ path: path.join(outDir, 'subs-disabled.png') });
 
   await page.evaluate(() => { document.documentElement.dataset.ysl = 'on'; });
-  await new Promise((r) => setTimeout(r, 300));
+  await sleep(300);
   const reenabled = await page.evaluate(() => document.querySelectorAll('.ysl-wl').length);
   check('re-enabling restores buttons', reenabled === withButtons.length, `${reenabled}`);
-
-  const ownErrors = consoleErrors.filter((e) => e.includes('yt-subs-list'));
-  check('no extension errors in console', ownErrors.length === 0, ownErrors.join(' | '));
-} finally {
-  await browser.close();
-  server.close();
-  fs.rmSync(extDir, { recursive: true, force: true });
 }
 
-console.log(`\n${passes.length} passed, ${failures.length} failed. Screenshots in ${outDir}`);
-process.exit(failures.length ? 1 : 0);
+async function testWatchLaterPage(page) {
+  console.log(`\n== Watch Later page (${wlFixture.name}) ==`);
+  const browseBefore = requests.browse.length;
+  const wlUrl = urlFor(wlFixture);
+  await page.goto(wlUrl, { waitUntil: 'load', timeout: 60000 });
+  await page.waitForFunction(() => document.querySelectorAll('.ysl-rm').length > 0, { timeout: 10000 }).catch(() => {});
+  await sleep(300);
 
-// ---------------------------------------------------------------------------
+  const rows = await page.evaluate(() => {
+    const visible = (el) => el && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0;
+    const browse = document.querySelector('ytd-browse[page-subtype="playlist"]');
+    return [...browse.querySelectorAll('ytd-playlist-video-renderer')].map((row) => {
+      const link = row.querySelector('a#video-title');
+      const wrap = row.querySelector('.ysl-rm');
+      const menu = row.querySelector('#menu');
+      const rect = (el) => (el ? el.getBoundingClientRect() : null);
+      return {
+        id: wrap?.dataset.vid || null,
+        href: link?.getAttribute('href') || '',
+        visible: visible(row),
+        state: wrap?.firstElementChild.dataset.state || null,
+        btnLeft: rect(wrap)?.left,
+        btnRight: rect(wrap)?.right,
+        titleRight: rect(link)?.right,
+        menuLeft: rect(menu)?.left,
+      };
+    });
+  });
+  fs.writeFileSync(path.join(outDir, 'wl-snapshot.json'), JSON.stringify(rows, null, 2));
+
+  const visibleRows = rows.filter((r) => r.visible);
+  check('Watch Later rows present', visibleRows.length >= 10, `${visibleRows.length} rows`);
+  check('every row links to the Watch Later list', visibleRows.every((r) => /[?&]list=WL(&|$)/.test(r.href)));
+  const withButtons = visibleRows.filter((r) => r.state);
+  check('every row has a remove button', withButtons.length === visibleRows.length, `${withButtons.length}/${visibleRows.length}`);
+  check('button id matches the row link', withButtons.every((r) => r.href.includes(`v=${r.id}`)));
+  const placed = withButtons.filter((r) => r.btnLeft >= r.titleRight - 1 && r.btnRight <= r.menuLeft + 1);
+  check('button sits between the title and the menu', placed.length === withButtons.length, `${placed.length}/${withButtons.length}`);
+  check('no playlist fetch on the Watch Later page', requests.browse.length === browseBefore);
+  await page.screenshot({ path: path.join(outDir, 'wl.png') });
+
+  const target = withButtons[0];
+  if (!target) return;
+  const sel = `.ysl-rm[data-vid="${target.id}"] .ysl-rm-btn`;
+  const editsBefore = requests.edit.length;
+  await page.click(sel);
+  await page
+    .waitForFunction((s) => document.querySelector(s).dataset.state !== 'busy', { timeout: 5000 }, sel)
+    .catch(() => {});
+  await sleep(100);
+  const after = await page.evaluate((s) => {
+    const btn = document.querySelector(s);
+    const row = btn.closest('ytd-playlist-video-renderer');
+    return { state: btn.dataset.state, removedAttr: row.hasAttribute('data-ysl-removed'), display: getComputedStyle(row).display, error: btn.parentElement.dataset.error || null };
+  }, sel);
+  const req = requests.edit.at(-1);
+  const sentRemove = requests.edit.length === editsBefore + 1 && req && req.body.playlistId === 'WL' && req.body.actions[0].action === 'ACTION_REMOVE_VIDEO_BY_VIDEO_ID' && req.body.actions[0].removedVideoId === target.id;
+  check('click sends a remove request for that video', sentRemove);
+  check('click did not navigate', page.url() === wlUrl);
+  if (wlFail) {
+    check('failed removal keeps the row and flags the button', !after.removedAttr && after.display !== 'none' && after.error === '1', JSON.stringify(after));
+  } else {
+    check('removed row disappears', after.removedAttr && after.display === 'none', JSON.stringify(after));
+    const remaining = await page.evaluate(() => [...document.querySelectorAll('ytd-playlist-video-renderer')].filter((r) => getComputedStyle(r).display !== 'none').length);
+    check('other rows stay', remaining === visibleRows.length - 1, `${remaining}`);
+  }
+  await page.screenshot({ path: path.join(outDir, 'wl-after.png') });
+
+  // Setting off: buttons go away.
+  await page.evaluate(() => { document.documentElement.dataset.yslWlRemove = 'off'; });
+  await sleep(300);
+  const hiddenCount = await page.evaluate(() => [...document.querySelectorAll('.ysl-rm')].filter((el) => getComputedStyle(el).display !== 'none').length);
+  check('turning the setting off hides the buttons', hiddenCount === 0, `${hiddenCount} visible`);
+  await page.evaluate(() => { document.documentElement.dataset.yslWlRemove = 'on'; });
+}
 
 function parseArgs(argv) {
   const out = {};
