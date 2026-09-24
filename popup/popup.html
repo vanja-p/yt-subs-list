@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>YouTube Subscriptions List</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <h1>Subscriptions List</h1>
+
+    <label class="row">
+      <input type="checkbox" id="enabled" />
+      <span>Enabled</span>
+    </label>
+
+    <label class="row">
+      <input type="checkbox" id="hideShorts" />
+      <span>Hide Shorts</span>
+    </label>
+
+    <label class="row">
+      <input type="checkbox" id="hideShelves" />
+      <span>Hide "Most relevant" and other shelves</span>
+    </label>
+
+    <label class="row">
+      <input type="checkbox" id="watchLater" />
+      <span>Show Watch Later buttons</span>
+    </label>
+
+    <label class="row slider">
+      <span>Thumbnail width <output id="thumbWidthValue"></output></span>
+      <input type="range" id="thumbWidth" min="160" max="400" step="10" />
+    </label>
+
+    <label class="row">
+      <input type="checkbox" id="debug" />
+      <span>Log details to the console</span>
+    </label>
+
+    <p class="hint">Changes apply immediately on open YouTube tabs.</p>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

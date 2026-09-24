@@ -1,0 +1,238 @@
+/*
+ * YouTube Subscriptions List
+ *
+ * Every rule is gated on html[data-ysl="on"] (set by content.js from the
+ * extension settings) and scoped to the subscriptions page, so nothing here
+ * leaks into other YouTube pages.
+ *
+ * YouTube renders without shadow DOM ("shady" CSS), so plain global selectors
+ * reach into every component.
+ */
+
+:root {
+  --ysl-thumb-width: 240px;
+  --ysl-row-gap: 16px;
+  --ysl-wl-size: 40px;
+  --ysl-accent: #065fd4;
+  --ysl-accent-text: #fff;
+  --ysl-btn-bg: rgba(0, 0, 0, 0.05);
+  --ysl-btn-bg-hover: rgba(0, 0, 0, 0.1);
+  --ysl-text-secondary: #606060;
+  --ysl-error: #c00;
+}
+
+html[dark] {
+  --ysl-accent: #3ea6ff;
+  --ysl-accent-text: #0f0f0f;
+  --ysl-btn-bg: rgba(255, 255, 255, 0.1);
+  --ysl-btn-bg-hover: rgba(255, 255, 255, 0.2);
+  --ysl-text-secondary: #aaa;
+  --ysl-error: #ff6b6b;
+}
+
+/* ---------- Hidden sections (Shorts, "Most relevant", other shelves) ---------- */
+
+html[data-ysl="on"] ytd-browse[page-subtype="subscriptions"] [data-ysl-hidden] {
+  display: none !important;
+}
+
+/* CSS-only first line of defence, in case the script has not run yet. */
+html[data-ysl="on"][data-ysl-hide-shorts="on"] ytd-browse[page-subtype="subscriptions"]
+  ytd-rich-section-renderer:has(ytd-rich-shelf-renderer[is-shorts]),
+html[data-ysl="on"][data-ysl-hide-shorts="on"] ytd-browse[page-subtype="subscriptions"]
+  ytd-rich-section-renderer:has(ytd-reel-shelf-renderer),
+html[data-ysl="on"][data-ysl-hide-shelves="on"] ytd-browse[page-subtype="subscriptions"]
+  ytd-rich-section-renderer:has(ytd-rich-shelf-renderer) {
+  display: none !important;
+}
+
+/* ---------- Grid -> list ---------- */
+
+html[data-ysl="on"] ytd-browse[page-subtype="subscriptions"] ytd-rich-grid-renderer > #contents {
+  display: flex !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+}
+
+html[data-ysl="on"] ytd-browse[page-subtype="subscriptions"]
+  ytd-rich-grid-renderer > #contents > ytd-rich-item-renderer {
+  /* Same side margins as the section headers, so rows line up with "Latest". */
+  width: calc(100% - var(--ytd-rich-grid-item-margin, 16px)) !important;
+  max-width: none !important;
+  margin: 0 calc(var(--ytd-rich-grid-item-margin, 16px) / 2) var(--ysl-row-gap) !important;
+}
+
+html[data-ysl="on"] ytd-browse[page-subtype="subscriptions"]
+  ytd-rich-grid-renderer > #contents > ytd-rich-item-renderer > #content {
+  width: 100%;
+}
+
+html[data-ysl="on"] ytd-browse[page-subtype="subscriptions"]
+  ytd-rich-grid-renderer > #contents > ytd-continuation-item-renderer {
+  width: 100% !important;
+}
+
+/* New-style "lockup" cards (what the feed uses as of 2026). */
+html[data-ysl="on"] ytd-browse[page-subtype="subscriptions"]
+  ytd-rich-grid-renderer > #contents > ytd-rich-item-renderer .ytLockupViewModelHost {
+  flex-direction: row !important;
+  align-items: flex-start !important;
+}
+
+html[data-ysl="on"] ytd-browse[page-subtype="subscriptions"]
+  ytd-rich-grid-renderer > #contents > ytd-rich-item-renderer .ytLockupViewModelContentImage {
+  flex: 0 0 var(--ysl-thumb-width) !important;
+  width: var(--ysl-thumb-width) !important;
+  max-width: var(--ysl-thumb-width) !important;
+  padding: 0 !important;
+  align-items: flex-start !important;
+}
+
+html[data-ysl="on"] ytd-browse[page-subtype="subscriptions"]
+  ytd-rich-grid-renderer > #contents > ytd-rich-item-renderer .ytLockupViewModelMetadata {
+  flex: 1 1 auto !important;
+  min-width: 0;
+  padding-left: 12px;
+}
+
+/* Old-style rich-grid cards (kept in case YouTube rolls the new cards back). */
+html[data-ysl="on"] ytd-browse[page-subtype="subscriptions"]
+  ytd-rich-grid-renderer > #contents > ytd-rich-item-renderer ytd-rich-grid-media > #dismissible {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+}
+
+html[data-ysl="on"] ytd-browse[page-subtype="subscriptions"]
+  ytd-rich-grid-renderer > #contents > ytd-rich-item-renderer ytd-rich-grid-media ytd-thumbnail {
+  flex: 0 0 var(--ysl-thumb-width) !important;
+  width: var(--ysl-thumb-width) !important;
+  margin: 0 !important;
+}
+
+html[data-ysl="on"] ytd-browse[page-subtype="subscriptions"]
+  ytd-rich-grid-renderer > #contents > ytd-rich-item-renderer ytd-rich-grid-media #details {
+  flex: 1 1 auto !important;
+  min-width: 0;
+  margin-top: 0 !important;
+  padding-left: 12px;
+}
+
+/* ---------- Watch Later column ---------- */
+
+.ysl-wl {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 64px;
+  padding: 2px 0 0;
+  margin-left: 8px;
+  user-select: none;
+}
+
+html[data-ysl="on"][data-ysl-watch-later="off"] .ysl-wl {
+  display: none !important;
+}
+
+.ysl-wl-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  width: var(--ysl-wl-size);
+  height: var(--ysl-wl-size);
+  border: none;
+  border-radius: 50%;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: var(--ysl-btn-bg);
+  color: var(--ysl-text-secondary);
+  transition: background-color 0.15s, color 0.15s, transform 0.1s;
+  position: relative;
+}
+
+.ysl-wl-btn:hover {
+  background: var(--ysl-btn-bg-hover);
+}
+
+.ysl-wl-btn:active {
+  transform: scale(0.94);
+}
+
+.ysl-wl-btn:focus-visible {
+  outline: 2px solid var(--ysl-accent);
+  outline-offset: 2px;
+}
+
+.ysl-wl-btn svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+  pointer-events: none;
+}
+
+.ysl-wl-btn .ysl-icon-check {
+  display: none;
+}
+
+.ysl-wl-btn[data-state="in"] {
+  background: var(--ysl-accent);
+  color: var(--ysl-accent-text);
+}
+
+.ysl-wl-btn[data-state="in"] .ysl-icon-clock {
+  display: none;
+}
+
+.ysl-wl-btn[data-state="in"] .ysl-icon-check {
+  display: block;
+}
+
+.ysl-wl-btn[data-state="unknown"] {
+  opacity: 0.45;
+}
+
+.ysl-wl-btn[data-state="busy"] {
+  cursor: progress;
+  color: transparent;
+}
+
+.ysl-wl-btn[data-state="busy"]::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--ysl-text-secondary);
+  border-top-color: transparent;
+  animation: ysl-spin 0.8s linear infinite;
+}
+
+@keyframes ysl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ysl-wl-label {
+  margin-top: 4px;
+  font-family: "Roboto", "Arial", sans-serif;
+  font-size: 1.1rem;
+  line-height: 1.4rem;
+  text-align: center;
+  color: var(--ysl-text-secondary);
+  white-space: nowrap;
+}
+
+.ysl-wl-btn[data-state="in"] + .ysl-wl-label {
+  color: var(--ysl-accent);
+  font-weight: 500;
+}
+
+.ysl-wl[data-error="1"] .ysl-wl-label {
+  color: var(--ysl-error);
+}

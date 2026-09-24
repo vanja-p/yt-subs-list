@@ -1,0 +1,13 @@
+{
+  "name": "yt-subs-list",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome extension: YouTube subscriptions as a chronological list with Watch Later buttons.",
+  "type": "module",
+  "scripts": {
+    "test": "node test/run.mjs"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.0.0"
+  }
+}
