@@ -1,6 +1,7 @@
-# YouTube Subscriptions List
+# YouTube Subscriptions & Watch Later
 
-A Chrome extension that makes the YouTube subscriptions feed look the way it used to:
+A Chrome extension that makes the YouTube subscriptions feed look the way it used to, and makes Watch Later
+quicker to manage:
 
 - **No Shorts, no "Most relevant"**: the Shorts shelf, the "Most relevant" shelf and any other shelf-style
   block are removed, leaving only the chronological feed under the "Latest" header.

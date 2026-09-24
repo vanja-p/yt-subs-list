@@ -9,6 +9,10 @@ const DEFAULTS = {
 };
 
 const checkboxes = ['enabled', 'hideShorts', 'hideShelves', 'watchLater', 'wlRemove', 'debug'];
+
+const manifest = chrome.runtime.getManifest();
+document.title = manifest.name;
+document.getElementById('title').textContent = manifest.name;
 const thumbWidth = document.getElementById('thumbWidth');
 const thumbWidthValue = document.getElementById('thumbWidthValue');
 

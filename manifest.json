@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Subscriptions List",
-  "short_name": "Subs List",
-  "version": "0.1.0",
-  "description": "Shows the YouTube subscriptions feed as a chronological list with Watch Later buttons, without Shorts or the \"Most relevant\" shelf.",
+  "name": "YouTube Subscriptions & Watch Later",
+  "short_name": "Subs & Watch Later",
+  "version": "0.2.0",
+  "description": "Chronological list view for the subscriptions feed without Shorts or \"Most relevant\", Watch Later buttons on every video, and one-click removal on the Watch Later page.",
   "minimum_chrome_version": "111",
   "icons": {
     "16": "icons/icon16.png",
@@ -27,7 +27,7 @@
     }
   ],
   "action": {
-    "default_title": "YouTube Subscriptions List",
+    "default_title": "YouTube Subscriptions & Watch Later",
     "default_popup": "popup/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

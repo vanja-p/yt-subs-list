@@ -11,25 +11,15 @@ body {
   padding: 12px 14px 10px;
 }
 
-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
 h1 {
   font-size: 14px;
   font-weight: 600;
-  margin: 0;
+  line-height: 1.3;
+  margin: 0 0 4px;
 }
 
-.switch {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
+.row.master {
+  font-weight: 500;
 }
 
 section {
